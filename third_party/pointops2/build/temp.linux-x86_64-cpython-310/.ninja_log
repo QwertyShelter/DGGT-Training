@@ -1,0 +1,22 @@
+# ninja log v7
+8	12815	1767941623175562835	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/subtraction/subtraction_cuda.o	d2f29e90e5d2aa6d
+6	13026	1767941623173562830	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/rpe/relative_pos_encoding_cuda.o	fcf72495f6aeae6f
+7	13185	1767941623174562833	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/sampling/sampling_cuda.o	7370dd52fb9dd1a5
+4	14035	1767941623171562826	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/interpolation/interpolation_cuda.o	15a27580297f8a13
+1	14118	1767941623168562819	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/attention/attention_cuda.o	90c6942f73a9e4e1
+3	14443	1767941623170562823	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/attention_v2/attention_cuda_v2.o	241a60d2b23cb7d0
+0	14604	1767941623167562816	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/aggregation/aggregation_cuda.o	62404cfd375a506
+5	14712	1767941623172562828	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/knnquery/knnquery_cuda.o	faa2ac715c8c74c4
+3	15064	1767941623170562823	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/grouping/grouping_cuda.o	bfc76983102129ee
+7	15258	1767941623174562833	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/rpe_v2/relative_pos_encoding_cuda_v2.o	aa88b1afbef65439
+4	26692	1767941623171562826	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/interpolation/interpolation_cuda_kernel.o	def5d2ddbd80f245
+2	27226	1767941623169562821	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/attention/attention_cuda_kernel.o	c829df4ce6d1cd42
+1	27399	1767941623168562819	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/aggregation/aggregation_cuda_kernel.o	bedcba7865f90079
+5	27431	1767941623172562828	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/knnquery/knnquery_cuda_kernel.o	c9aa97b58b240f52
+2	27707	1767941623169562821	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/attention_v2/attention_cuda_kernel_v2.o	aa76650358c0c962
+8	28100	1767941623175562835	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/subtraction/subtraction_cuda_kernel.o	b696a160571b56a5
+7	28736	1767941623174562833	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/rpe_v2/relative_pos_encoding_cuda_kernel_v2.o	e4167c86fa064db9
+6	29232	1767941623173562830	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/rpe/relative_pos_encoding_cuda_kernel.o	5555e90f329d4ee6
+3	29860	1767941623170562823	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/grouping/grouping_cuda_kernel.o	b66f755d2256d932
+6	30936	1767941623173562830	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/pointops_api.o	3438afb38cddaebc
+8	31320	1767941623175562835	/data/raid5/wangpeifeng/project/4DReconstruction/dggt/third_party/pointops2/build/temp.linux-x86_64-cpython-310/src/sampling/sampling_cuda_kernel.o	72a77701865bba7d
