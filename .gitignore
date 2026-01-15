@@ -3,3 +3,4 @@ output
 davis
 checkpoints
 .vscode/
+data/waymo

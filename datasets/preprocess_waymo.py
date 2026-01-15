@@ -127,7 +127,7 @@ if __name__ == "__main__":
         print(f"scene_lists: {scene_lists}")
 
     if args.dataset == "waymo":
-        from datasets.waymo.waymo_preprocess_ import WaymoProcessor 
+        from waymo.waymo_preprocess_ import WaymoProcessor 
 
         dataset_processor = WaymoProcessor(
             load_dir=args.data_root,
