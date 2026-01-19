@@ -23,7 +23,7 @@ class CoTrackerCNNEncoder(nn.Module):
         self.backbone = BasicEncoder(output_dim=output_dim, stride=stride)
         if pretrained:
             cotracker = torch.hub.load("facebookresearch/co-tracker", "cotracker3_offline")
-            backbone_state_dict = cotracker.fnet.state_dict()
+            backbone_state_dict = cotracker.model.fnet.state_dict()
             self.backbone.load_state_dict(backbone_state_dict, strict=True)
             del cotracker
 

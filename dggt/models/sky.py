@@ -278,12 +278,11 @@ class SkyGaussian(nn.Module):
         return bg_render
 
 
-    def forward(self, images, extrinsics, intrinsics,downsample=1):
+    def forward(self, images, extrinsics, intrinsics, downsample=1):
         S = extrinsics.shape[0]
         intrinsics_4x4 = torch.eye(4).unsqueeze(0).repeat(S, 1, 1).to(device=intrinsics.device)
         intrinsics_4x4[:,:3, :3] = intrinsics
-
-        background_feat,proj_mask, background_scale_res = self._get_background_color(
+        background_feat, proj_mask, background_scale_res = self._get_background_color(
                                                                                     source_images=images,
                                                                                     source_extrinsics= extrinsics,
                                                                                     intrinsics= intrinsics_4x4,

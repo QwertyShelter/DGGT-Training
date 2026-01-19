@@ -4,9 +4,12 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import torch
 from .rotation import quat_to_mat, mat_to_quat
 
+MIN_FOV = 0.3   # ≈ 20°
+MAX_FOV = 2.5    # ≈ 137°
 
 def extri_intri_to_pose_encoding(
     extrinsics,
@@ -108,8 +111,21 @@ def pose_encoding_to_extri_intri(
     if pose_encoding_type == "absT_quaR_FoV":
         T = pose_encoding[..., :3]
         quat = pose_encoding[..., 3:7]
+        # FoV 和尺度解耦，但是可能出现极端值
+        # 另一种方法是预测 log-focal，不会出现极端值但是会改变模型语义，同时和尺度耦合
+        # 因此现阶段修改方法是继续预测 FoV，但是加上限制条件
+        # 另外 FoV 应该有有限取值范围 (0, pi)，因此不能直接 log-FoV，log 更适合无上界的数值
         fov_h = pose_encoding[..., 7]
         fov_w = pose_encoding[..., 8]
+
+        fov_h = torch.sigmoid(fov_h) * (MAX_FOV - MIN_FOV) + MIN_FOV
+        fov_w = torch.sigmoid(fov_w) * (MAX_FOV - MIN_FOV) + MIN_FOV
+
+        assert (fov_h > 0).all() and (fov_h < math.pi).all(), \
+                f"Invalid fov_h values detected: min {fov_h.min().item()}, max {fov_h.max().item()}"
+        assert (fov_w > 0).all() and (fov_w < math.pi).all(), \
+                f"Invalid fov_w values detected: min {fov_w.min().item()}, max {fov_w.max().item()}"
+
 
         R = quat_to_mat(quat)
         extrinsics = torch.cat([R, T[..., None]], dim=-1)

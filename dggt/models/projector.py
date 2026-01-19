@@ -45,7 +45,8 @@ class Projector():
         normalized_pixel_locations = 2 * pixel_locations / resize_factor - 1.  # [n_views, n_points, 2]
         return normalized_pixel_locations
 
-    def compute_projections(self, xyz, train_cameras,train_intrinsics):
+    # FIXME: GPT told me it is dangerous !
+    def compute_projections(self, xyz, train_cameras, train_intrinsics):
         '''
         project 3D points into cameras
         :param xyz: [..., 3]  Opencv

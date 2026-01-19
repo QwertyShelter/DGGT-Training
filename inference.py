@@ -93,7 +93,7 @@ def main():
     parser.add_argument('--intervals', type=int, default=2, help='Interval for mode=3')
     args = parser.parse_args()
     os.makedirs(args.output_path, exist_ok=True)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda:2" if torch.cuda.is_available() else "cpu"
     dtype = torch.float32
     loss_fn = lpips.LPIPS(net='alex').to(device)
 
@@ -124,7 +124,7 @@ def main():
     checkpoint = torch.load(args.ckpt_path, map_location="cpu")
     model.load_state_dict(checkpoint, strict=True)
     if args.mode == 3:
-        track_ckpt = 'path_to_track_model'
+        track_ckpt = 'checkpoints/tapip3d_final.pth'
         track_model = load_model(track_ckpt)
         track_model.to(device)
         track_model.seq_len = 2
@@ -189,7 +189,7 @@ def main():
                     depth_map = depth_map.unsqueeze(0)
                     if args.input_views == 1:
                         (extrinsic, intrinsic, point_map, gs_map, dy_map, 
-                        gs_conf, bg_mask, images, pred_flows, flow_masks,depth_interp) = interp_all(extrinsic, intrinsic, point_map, gs_map, dy_map, 
+                        gs_conf, bg_mask, images, pred_flows, flow_masks, depth_interp) = interp_all(extrinsic, intrinsic, point_map, gs_map, dy_map, 
                                                                                 gs_conf, bg_mask, images, target_images, depth_map, track_model,intervals,views)
                     # if args.input_views == 3:
                     #     (extrinsic, intrinsic, point_map, gs_map, dy_map, 

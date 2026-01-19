@@ -4,3 +4,5 @@ davis
 checkpoints
 .vscode/
 data/waymo
+data/annotations
+logs

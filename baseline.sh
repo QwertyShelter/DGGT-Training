@@ -7,7 +7,7 @@ python datasets/preprocess_waymo.py \
     --dataset waymo \
     --split validation \
     --scene_list_file data/waymo_val_list.txt \
-    --scene_ids 1 2 3 \
+    --scene_ids 0 1 2 \
     --num_workers 8 \
     --process_keys images lidar calib pose dynamic_masks ground \
     --json_folder_to_save data/annotations/waymo
@@ -21,7 +21,7 @@ python datasets/tools/extract_masks.py \
 
 python inference.py \
     --image_dir data/waymo/processed/validation \
-    --scene_names 1 \
+    --scene_names 0 1 2 \
     --input_views 1 \
     --intervals 2 \
     --sequence_length 4 \
@@ -32,3 +32,21 @@ python inference.py \
     -images \
     -depth \
     -metrics
+
+
+torchrun --nproc_per_node=1 --master_port=0000 my_train.py \
+  --image_dir data/waymo/processed/validation \
+  --scene_names 0 1 2 \
+  --log_dir logs/test
+
+
+python my_train.py \
+  --image_dir data/waymo/processed/validation \
+  --scene_names 0 1 2 \
+  --log_dir logs/test
+
+
+python train.py \
+  --image_dir data/waymo/processed/validation \
+  --scene_names 0 1 2 \
+  --log_dir logs/test

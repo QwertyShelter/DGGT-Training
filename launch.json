@@ -1,0 +1,31 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python 调试程序: 包含参数的当前文件",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "PATH": "/home/wangpeifeng/miniconda3/envs/dggt/bin:${env:PATH}"
+            },
+            "args": [
+                "--image_dir", "data/waymo/processed/validation",
+                // "--scene_names", "(0,2)",
+                "--input_views", "1",
+                "--intervals", "2",
+                "--sequence_length", "4",
+                "--start_idx", "0",
+                "--mode", "3",
+                "--ckpt_path", "checkpoints/model_latest_waymo.pt",
+                "--output_path", "output/inference",
+                "-images", "-depth", "-metrics"
+            ]
+        }
+    ]
+}
