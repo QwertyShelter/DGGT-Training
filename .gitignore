@@ -7,3 +7,5 @@ data/waymo
 data/annotations
 logs
 wandb
+__pycache__/
+build/
