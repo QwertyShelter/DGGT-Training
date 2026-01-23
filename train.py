@@ -50,17 +50,17 @@ def parse_args():
     return parser.parse_args()
 
 def main(args):
-    # dist.init_process_group(backend='nccl')
-    # args.local_rank = int(os.environ["LOCAL_RANK"])
+    dist.init_process_group(backend='nccl')
+    args.local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(args.local_rank)
     device = torch.device("cuda", args.local_rank)
     dtype = torch.float32
-    
-    # dataset = WaymoOpenDataset(args.image_dir, scene_names=[str(i).zfill(3) for i in range(300,600)], sequence_length=args.sequence_length, mode=1, views=1)
-    # sampler = DistributedSampler(dataset,shuffle=True)
-    # dataloader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=4)
+
     dataset = WaymoOpenDataset(args.image_dir, scene_names=[str(i).zfill(3) for i in range(0,3)], sequence_length=args.sequence_length, mode=1, views=1)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=4)
+    # dataset = WaymoOpenDataset(args.image_dir, scene_names=[str(i).zfill(3) for i in range(300,600)], sequence_length=args.sequence_length, mode=1, views=1)
+    sampler = DistributedSampler(dataset,shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=4)
+    # dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=4)
 
     if args.local_rank == 0:
         os.makedirs(args.log_dir, exist_ok=True)
@@ -72,8 +72,8 @@ def main(args):
     # model.load_state_dict(checkpoint, strict=False)
 
     model.train()
-    # model = DDP(model, device_ids=[args.local_rank]) #, find_unused_parameters=True)
-    # model._set_static_graph()
+    model = DDP(model, device_ids=[args.local_rank]) #, find_unused_parameters=True)
+    model._set_static_graph()
     
     lpips_loss_fn = lpips.LPIPS(net='alex').to(device)
 
@@ -89,10 +89,10 @@ def main(args):
 
     # module
     optimizer = AdamW([
-        {'params': model.gs_head.parameters(), 'lr': 4e-5},
+        {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
         # {'params': model.module.semantic_head.parameters(), 'lr': 1e-4},
-        {'params': model.instance_head.parameters(), 'lr': 4e-5},
-        {'params': model.sky_model.parameters(), 'lr': 1e-4},
+        {'params': model.module.instance_head.parameters(), 'lr': 4e-5},
+        {'params': model.module.sky_model.parameters(), 'lr': 1e-4},
     ], weight_decay=1e-4)
 
     warmup_iterations = 1000
@@ -187,8 +187,8 @@ def main(args):
 
                 renders = torch.cat(chunked_renders, dim=0)
                 alphas = torch.cat(chunked_alphas, dim=0)
-                # bg_render = model.module.sky_model(images, extrinsic, intrinsic)
-                bg_render = model.sky_model(images, extrinsic, intrinsic)
+                bg_render = model.module.sky_model(images, extrinsic, intrinsic)
+                # bg_render = model.sky_model(images, extrinsic, intrinsic)
                 renders = alphas * renders + (1 - alphas) * bg_render
 
                 rendered_image = renders.permute(0, 3, 1, 2)

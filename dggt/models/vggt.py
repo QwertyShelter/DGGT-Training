@@ -35,7 +35,7 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
         self.instance_head = DPTHead(dim_in= embed_dim, output_dim = 1 + 1, activation="linear") # ,down_ratio=2)#RGB
         self.semantic_head = DPTHead(dim_in= embed_dim, output_dim = semantic_num + 1, activation="linear")# ,down_ratio=2)#RGB
         # Color, opacity, scale, rotation
-        self.sky_model = SkyGaussian()
+        # self.sky_model = SkyGaussian()
         #self.fusion_model = PointNetGSFusion()
         #self.splatformer = FeaturePredictor()
         #self.point_offset_head = DPTHead(dim_in=2 * embed_dim, output_dim=4, activation="inv_log_1")

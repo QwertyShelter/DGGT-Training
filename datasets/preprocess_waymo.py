@@ -117,7 +117,7 @@ if __name__ == "__main__":
         # Build scene_lists as list of (index, scene_name) based on requested scene_ids
         # If user did not provide --scene_ids (args.scene_ids is None), treat it as
         # "process all discovered scenes" and use the full range [0..N-1].
-        if args.scene_ids is None:
+        if args.scene_ids is None and args.start_idx is None:
             valid_scene_ids = list(range(len(scene_names)))
         else:
             valid_scene_ids = [int(sid) for sid in scene_ids if int(sid) >= 0 and int(sid) < len(scene_names)]

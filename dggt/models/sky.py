@@ -242,6 +242,7 @@ class SkyGaussian(nn.Module):
 
         H, W = images.shape[-2:]
 
+        '''
         chunk_size = 4 
         chunked_renders = []
         S_ = extrinsics_.shape[0]
@@ -259,10 +260,8 @@ class SkyGaussian(nn.Module):
                         height=H
                     )
             # #
-            points = self.bg_pcd[proj_mask]
-
-
-            color = background_feat
+            # points = self.bg_pcd[proj_mask]
+            # color = background_feat
             # import open3d as o3d
             # points_np = points.cpu().numpy()
             # colors_np = color.cpu().numpy()
@@ -271,10 +270,22 @@ class SkyGaussian(nn.Module):
             # pcd.colors = o3d.utility.Vector3dVector(colors_np)  # Should be in [0, 1] range
             # o3d.io.write_point_cloud("output.ply", pcd)
             #T.ToPILImage()(bg_render[0].permute(2,0,1).detach().cpu().clamp(0, 1)).save(f"test.png")
-
-
             chunked_renders.append(bg_render)
         bg_render = torch.cat(chunked_renders, dim=0)  # (B, S, 3, H, W)
+        '''
+
+        bg_render, _, _  = rasterization(
+                    means=self.bg_pcd[proj_mask],       
+                    quats=self.bg_quat[proj_mask],           
+                    scales=torch.exp(self.bg_scales)[proj_mask] + background_scale_res,           
+                    opacities=self.bg_opacity.squeeze(-1)[proj_mask],        
+                    colors=background_feat.detach(),              
+                    viewmats=extrinsics,                    # (B, 4, 4)
+                    Ks=intrinsics,                          # (B, 3, 3)
+                    width=W,
+                    height=H
+                )
+
         return bg_render
 
 
@@ -291,6 +302,7 @@ class SkyGaussian(nn.Module):
 
         H, W = images.shape[-2:]
 
+        '''
         chunk_size = 4 
         chunked_renders = []
         for start in range(0, S, chunk_size):
@@ -319,4 +331,18 @@ class SkyGaussian(nn.Module):
             #T.ToPILImage()(bg_render[0].permute(2,0,1).detach().cpu().clamp(0, 1)).save(f"test.png")
             chunked_renders.append(bg_render)
         bg_render = torch.cat(chunked_renders, dim=0)  # (B, S, 3, H, W)
+        '''
+
+        bg_render, _, _  = rasterization(
+                    means=self.bg_pcd[proj_mask],       
+                    quats=self.bg_quat[proj_mask],           
+                    scales=torch.exp(self.bg_scales)[proj_mask] + background_scale_res,           
+                    opacities=self.bg_opacity.squeeze(-1)[proj_mask],        
+                    colors=background_feat.detach(),              
+                    viewmats=extrinsics,                    # (B, 4, 4)
+                    Ks=intrinsics,                          # (B, 3, 3)
+                    width=W,
+                    height=H
+                )
+
         return bg_render

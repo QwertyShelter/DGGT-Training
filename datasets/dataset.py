@@ -349,8 +349,9 @@ class WaymoOpenDataset(Dataset):
 
             #sky masks
             if self.views == 1:
-                mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                # mask_seq = [sky_mask_paths[i] for i in indices]
+                # masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                masks = torch.ones_like(images)
             elif self.views == 3:
                 mask_seq = []
                 for i in indices:

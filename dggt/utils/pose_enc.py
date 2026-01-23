@@ -118,8 +118,8 @@ def pose_encoding_to_extri_intri(
         fov_h = pose_encoding[..., 7]
         fov_w = pose_encoding[..., 8]
 
-        fov_h = torch.sigmoid(fov_h) * (MAX_FOV - MIN_FOV) + MIN_FOV
-        fov_w = torch.sigmoid(fov_w) * (MAX_FOV - MIN_FOV) + MIN_FOV
+        # fov_h = torch.sigmoid(fov_h) * (MAX_FOV - MIN_FOV) + MIN_FOV
+        # fov_w = torch.sigmoid(fov_w) * (MAX_FOV - MIN_FOV) + MIN_FOV
 
         assert (fov_h > 0).all() and (fov_h < math.pi).all(), \
                 f"Invalid fov_h values detected: min {fov_h.min().item()}, max {fov_h.max().item()}"

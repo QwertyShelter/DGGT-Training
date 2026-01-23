@@ -23,6 +23,7 @@ from torch.optim import AdamW
 import torch.distributed as dist
 from torch.optim.lr_scheduler import LambdaLR
 from torch.nn.parallel import DistributedDataParallel as DDP
+# from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, MixedPrecision
 
 def alpha_t(t, t0, alpha, gamma0 = 1, gamma1 = 0.1):
     sigma = torch.log(torch.tensor(gamma1)).to(gamma0.device) / ((gamma0)**2 + 1e-6)
@@ -240,18 +241,10 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
 
             renders = torch.cat(chunked_renders, dim=0)
             alphas = torch.cat(chunked_alphas, dim=0)
-
-            print("Code to here0.")
-
-            bg_render = model.sky_model(images, extrinsic, intrinsic)
-
-            print("Code to here1.")
-
-            bg_render = (bg_render - bg_render.min()) / (bg_render.max() - bg_render.min() + 1e-8)  # TODO: Why this ?
-
-            print("Code to here2.")
-            renders = alphas * renders + (1 - alphas) * bg_render
-            rendered_image = renders.permute(0, 3, 1, 2)
+            # bg_render = model.module.sky_model(images, extrinsic, intrinsic)
+            # bg_render = (bg_render - bg_render.min()) / (bg_render.max() - bg_render.min() + 1e-8)  # TODO: Why this ?
+            # renders = alphas * renders + (1 - alphas) * bg_render
+            rendered_image = (alphas * renders).permute(0, 3, 1, 2)
             target_image = images[0]
 
             # TODO: scene_name and time
@@ -300,10 +293,23 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
         
         # TODO: args.log_dir
         if args.local_rank == 0 and step > 0 and step % args.save_ckpt == 0:
-            ckpt_path = os.path.join(args.log_dir, "ckpt", f"model_latest.pt")
-            # torch.save(model.module.state_dict(), ckpt_path)
+            ckpt_path = os.path.join(args.log_dir, "ckpt", f"model_{step}.pt")
+            torch.save(model.module.state_dict(), ckpt_path)
+            # torch.save(model.state_dict(), ckpt_path)
+            print(f"[Checkpoint] Saved model at step {step} to {ckpt_path}")
+        
+        '''
+        FSDP.set_state_dict_type(
+            model,
+            StateDictType.FULL_STATE_DICT,
+        )
+
+        if args.local_rank == 0:
+            ckpt_path = os.path.join(args.log_dir, "ckpt", f"model_{step}.pt")
             torch.save(model.state_dict(), ckpt_path)
             print(f"[Checkpoint] Saved model at step {step} to {ckpt_path}")
+        '''
+
 
 # args includes: output_path, log_dir, save_image, save_ckpt, local_rank, max_epoch
 # args includes: image_dir, scene_names, sequence_length, batch_size
@@ -314,14 +320,15 @@ def main():
     parser.add_argument('--sequence_length', type=int, default=4, help='Number of input frames')
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
     parser.add_argument('--log_dir', type=str, default="logs/test", help='Path to the log directory')
-    parser.add_argument('--save_image', type=int, default=10, help='Epoch intervals to save images')
-    parser.add_argument('--save_ckpt', type=int, default=10, help='Epoch intervals to save checkpoints')
+    parser.add_argument('--save_image', type=int, default=5, help='Epoch intervals to save images')
+    parser.add_argument('--save_ckpt', type=int, default=5, help='Epoch intervals to save checkpoints')
+    parser.add_argument('--ckpt_path', type=str, default="", help='Path to the pre-trained checkpoint')
     parser.add_argument('--local_rank', type=int, default=1, help='Local rank for distributed training')
     parser.add_argument('--max_epoch', type=int, default=10, help='Maximum number of epochs')
     args = parser.parse_args()
 
-    # dist.init_process_group(backend='nccl')
-    # args.local_rank = int(os.environ["LOCAL_RANK"])
+    dist.init_process_group(backend='nccl')
+    args.local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(args.local_rank)
     device = torch.device("cuda", args.local_rank)
     dtype = torch.float32
@@ -340,13 +347,14 @@ def main():
         mode=1,
         views=1
     )
-    # sampler = DistributedSampler(dataset,shuffle=True)
-    # dataloader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=4)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=4)
+    sampler = DistributedSampler(dataset,shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=4)
+    # dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=4)
 
-    print("Dataset loaded successfully !")
+    
 
     if args.local_rank == 0:
+        print("Dataset loaded successfully !")
         # os.makedirs(args.output_path, exist_ok=True)
         os.makedirs(args.log_dir, exist_ok=True)
         os.makedirs(os.path.join(args.log_dir, "images"), exist_ok=True)
@@ -354,16 +362,37 @@ def main():
     # ================ Model ================
 
     model = VGGT().to(device)
-    # checkpoint = torch.load(args.ckpt_path, map_location="cpu")
-    # model.load_state_dict(checkpoint, strict=True)
+    if args.ckpt_path != "":
+        if args.local_rank == 0:
+            print(f"Resume training, loading model from {args.ckpt_path}...")
+        checkpoint = torch.load(args.ckpt_path, map_location="cpu")
+        model.load_state_dict(checkpoint, strict=True)
+    
+    # mp_policy = MixedPrecision(
+    #     param_dtype=torch.float16,
+    #     reduce_dtype=torch.float16,
+    #     buffer_dtype=torch.float16,
+    # )
 
     model.train()
-    # model = DDP(model, device_ids=[args.local_rank])
+    # model = FSDP(
+    #     model,
+    #     device_id=torch.cuda.current_device(),
+    #     use_orig_params=True,
+    #     mixed_precision=mp_policy,
+    # )
+
+    model = DDP(
+        model,
+        device_ids=[args.local_rank], 
+        static_graph=False,
+        find_unused_parameters=True
+    )
     # model._set_static_graph()
     # PyTorch Lightning 会假设模型结构在前向传播中保持不变
     # 避免在每个训练步骤中重新分析计算图，减少内存分配和释放的开销
-
-    print("VGGT model loaded successfully !")
+    if args.local_rank == 0:
+        print("VGGT model loaded successfully !")
 
     loss_fn = FeedForwardLoss(lambda_o=1, lambda_d=0.05, lambda_l=0.01, lambda_lpips=0.05, device=device)
 
@@ -378,13 +407,11 @@ def main():
     # optimizer = AdamW([
     #     {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
     #     {'params': model.module.instance_head.parameters(), 'lr': 4e-5},
-    #     {'params': model.module.sky_model.parameters(), 'lr': 1e-4},
     # ], weight_decay=1e-4)
 
     optimizer = AdamW([
         {'params': model.gs_head.parameters(), 'lr': 4e-5},
-        {'params': model.instance_head.parameters(), 'lr': 4e-5},
-        {'params': model.sky_model.parameters(), 'lr': 1e-4},
+        {'params': model.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)
 
     warmup_iterations = 1000
@@ -394,10 +421,28 @@ def main():
             1 + torch.cos(torch.tensor(torch.pi * step / args.max_epoch)))
     )
 
-    print("Begin the training...")
+    if args.local_rank == 0:
+        print("Begin the training...")
 
     for step in tqdm(range(args.max_epoch)):
         train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device, args)
+
+    '''
+    FSDP.set_state_dict_type(
+        model,
+        StateDictType.FULL_STATE_DICT,
+    )
+
+    if args.local_rank == 0:
+        ckpt_path = os.path.join(args.log_dir, "ckpt", f"model_final.pt")
+        torch.save(model.state_dict(), ckpt_path)
+        print(f"[Checkpoint] Saved final model to {ckpt_path}")
+    '''
+
+    if args.local_rank == 0:
+        ckpt_path = os.path.join(args.log_dir, "ckpt", f"model_final.pt")
+        torch.save(model.module.state_dict(), ckpt_path)
+        print(f"[Checkpoint] Saved final model to {ckpt_path}")
 
 
 if __name__ == "__main__":

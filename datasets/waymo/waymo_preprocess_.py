@@ -108,6 +108,7 @@ def get_ground_np(pts):
     lpr = np.mean(pts_sort[:num_lpr_, 2])
     pts_g = pts_sort[pts_sort[:, 2] < lpr + th_seeds_, :]
     normal_ = np.zeros(3)
+    svd_fail_count = 0
     for i in range(n_iter):
         mean = np.mean(pts_g, axis=0)[:3]
         xx = np.mean((pts_g[:, 0] - mean[0]) * (pts_g[:, 0] - mean[0]))
@@ -120,7 +121,13 @@ def get_ground_np(pts):
             [[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]],
             dtype=np.float32,
         )
-        U, S, V = np.linalg.svd(cov)
+        try:
+            U, S, V = np.linalg.svd(cov)
+        except np.linalg.LinAlgError:
+            svd_fail_count += 1
+            print(f"SVD失败次数: {svd_fail_count}, 当前点数: {pts.shape[0]}")
+            # 返回保守估计 (全标记为 ground)
+            return np.ones((pts.shape[0], 1), dtype=bool)
         normal_ = U[:, 2]
         d_ = -normal_.dot(mean)
         th_dist_d_ = th_dist_ - d_
