@@ -81,7 +81,48 @@ python datasets/preprocess_waymo.py \
 
 
 python main.py \
-  --exp_name waymo_test_full \
+  --exp_name waymo_test_full_continue \
   --image_dir ../../dataset/waymo_processed/validation --batch_size 1 \
-  --max_epoch 50 --local_rank 4 \
-  --save_image 5 --save_ckpt 10
+  --start_epoch 100 --max_epoch 300 --local_rank 4 \
+  --save_image 5 --save_ckpt 10 \
+  --ckpt_path logs/test/ckpts/model_final.pt
+
+
+CUDA_VISIBLE_DEVICES=1,2 torchrun --nproc_per_node=2 --master_port=12345 main_count.py
+
+# --image_dir ../../dataset/waymo_processed/validation \
+python pts3d_batch.py \
+  --image_dir ../../dataset/waymo_processed/validation \
+  --scene_names "(0,202)" \
+  --ckpt_path logs/test/ckpts/model_final.pt \
+  --start_idx 0 \
+  --output_path result/pts3d_waymo
+
+python pts3d_batch.py \
+  --image_dir ../../dataset/waymo_processed/validation \
+  --scene_names "(0,202)" \
+  --ckpt_path checkpoints/vggt_model.pt \
+  --start_idx 0 \
+  --output_path result/vggt_waymo
+
+python datasets/tools/extract_masks.py \
+    --data_root ../../dataset/waymo_processed/validation \
+    --segformer_path=../SegFormer \
+    --checkpoint=checkpoints/segformer.b5.1024x1024.city.160k.pth \
+    --split_file data/waymo_finetune_scenes.txt \
+    --process_dynamic_mask
+
+python pts3d_batch.py \
+  --image_dir ../../dataset/waymo_processed/validation \
+  --scene_names "(20,202)" \
+  --ckpt_path checkpoints/model_latest_waymo.pt \
+  --start_idx 0 \
+  --output_path result/dggt_waymo
+
+
+CUDA_VISIBLE_DEVICES=2,3,5,6 torchrun --nproc_per_node=4 --master_port=12345 main_count.py \
+  --exp_name waymo_test_full_continue \
+  --image_dir ../../dataset/waymo_processed/validation --batch_size 1 \
+  --start_epoch 300 --max_epoch 400 --local_rank 4 \
+  --save_image 5 --save_ckpt 10 --log_dir "logs/test" \
+  --ckpt_path logs/test/ckpts/model_final.pt

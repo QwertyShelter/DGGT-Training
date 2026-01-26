@@ -45,7 +45,7 @@ def animate(ply_dir, out_video=None, fps=10, point_size=2.0, window_size=(1024,7
         # if extent == 0:
         #     extent = -0.1
         # eye = center + np.array([0.0, 0.0, extent * 2.0])
-        eye = np.array([0.0, 0.0, -1.0])     # -1.0
+        eye = np.array([0.0, -0.1, 0.3])     # -1.0
         up = np.array([0.0, -1.0, 0.0])
         cam = renderer.scene.camera
         cam.look_at(center, eye, up)
@@ -82,8 +82,8 @@ def animate(ply_dir, out_video=None, fps=10, point_size=2.0, window_size=(1024,7
 # ...existing code...
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Animate PLY sequence with Open3D")
-    parser.add_argument("--ply_dir", default='../result/waymo_bus', help="Directory with .ply frames (sorted lexicographically)")
-    parser.add_argument("--out", default='dggt_bus.mp4', help="Output MP4 path (optional)")
+    parser.add_argument("--ply_dir", default='../result/bus', help="Directory with .ply frames (sorted lexicographically)")
+    parser.add_argument("--out", default='output/bus.mp4', help="Output MP4 path (optional)")
     parser.add_argument("--fps", type=int, default=10)
     parser.add_argument("--point_size", type=float, default=2.0)
     parser.add_argument("--width", type=int, default=1024)

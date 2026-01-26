@@ -118,6 +118,7 @@ def pose_encoding_to_extri_intri(
         fov_h = pose_encoding[..., 7]
         fov_w = pose_encoding[..., 8]
 
+        # FIXME: 因为原本的 vggt 的训练就没有这个，所以暂时先不加这个限制
         # fov_h = torch.sigmoid(fov_h) * (MAX_FOV - MIN_FOV) + MIN_FOV
         # fov_w = torch.sigmoid(fov_w) * (MAX_FOV - MIN_FOV) + MIN_FOV
 

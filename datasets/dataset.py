@@ -331,10 +331,13 @@ class WaymoOpenDataset(Dataset):
         start_idx = random.randint(0, max(1, len(image_paths[0] if self.views == 3 else image_paths) - 21))
 
         if self.mode == 1:
-            indices = [start_idx]
-            intervals = sorted(random.sample(range(1, 20), self.sequence_length - 1))
-            for interval in intervals:
-                indices.append(start_idx + interval)
+            start_idx = 0
+            indices = [start_idx + i * self.interval for i in range(self.sequence_length)]
+            intervals = [self.interval for _ in range(self.sequence_length - 1)]
+            # indices = [start_idx]
+            # intervals = sorted(random.sample(range(1, 20), self.sequence_length - 1))
+            # for interval in intervals:
+            #     indices.append(start_idx + interval)
 
             #images
             if self.views == 1:

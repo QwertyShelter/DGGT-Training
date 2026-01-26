@@ -324,6 +324,7 @@ def main():
     parser.add_argument('--ckpt_path', type=str, default="logs/test/ckpts/model_final.pt", help='Path to the pre-trained checkpoint')
     parser.add_argument('--local_rank', type=int, default=4, help='Local rank for distributed training')
     parser.add_argument('--max_epoch', type=int, default=1, help='Maximum number of epochs')
+    parser.add_argument('--start_epoch', type=int, default=0, help='Start number of epochs')
     args = parser.parse_args()
 
     # ================ Initial ================
@@ -395,7 +396,7 @@ def main():
 
     print("Begin the training...")
 
-    for step in tqdm(range(args.max_epoch)):
+    for step in tqdm(range(args.start_epoch, args.max_epoch)):
         train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device, args)
 
     ckpt_path = os.path.join(args.log_dir, "ckpts", f"model_final.pt")
