@@ -168,8 +168,8 @@ def main():
     dataset = NaiveDavisDataset(args.image_dir, partial=True)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
 
     model = VGGT().to(device)
     checkpoint = torch.load(args.ckpt_path, map_location="cpu")

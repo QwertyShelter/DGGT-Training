@@ -410,10 +410,10 @@ def main():
     # ], weight_decay=1e-4)
 
     optimizer = AdamW([
-        {'params': model.point_head.parameters(), 'lr': 1e-4},
-        {'params': model.depth_head.parameters(), 'lr': 1e-4},
-        {'params': model.gs_head.parameters(), 'lr': 4e-5},
-        {'params': model.instance_head.parameters(), 'lr': 4e-5}
+        {'params': model.module.point_head.parameters(), 'lr': 1e-4},
+        {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
+        {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
+        {'params': model.module.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)
 
     warmup_iterations = 1000

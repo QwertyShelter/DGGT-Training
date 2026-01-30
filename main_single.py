@@ -1,8 +1,4 @@
 import os
-
-os.environ["http_proxy"] = "http://127.0.0.1:7890"
-os.environ["https_proxy"] = "http://127.0.0.1:7890"
-
 import time
 import torch
 import lpips
@@ -12,7 +8,8 @@ import imageio
 import argparse
 from torch import nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, DistributedSampler
+import torchvision.transforms as T
+from torch.utils.data import DataLoader
 
 from dggt.models.vggt import VGGT
 from dggt.utils.gs import concat_list, get_split_gs
@@ -22,14 +19,12 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 from gsplat.rendering import rasterization
 from datasets.dataset import WaymoOpenDataset
-from datasets.davis_dataset import DavisDataset
 
 import numpy as np
 from tqdm import tqdm
 from torch.optim import AdamW
 import torch.distributed as dist
 from torch.optim.lr_scheduler import LambdaLR
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def alpha_t(t, t0, alpha, gamma0 = 1, gamma1 = 0.1):
@@ -129,17 +124,17 @@ def compute_lifespan_loss(gamma):
 
 
 class FeedForwardLoss(nn.Module):
-    def __init__(self, lambda_o=1, lambda_d=0.05, lambda_l=0.01, lambda_lpips=0.05, device='cpu'):
+    def __init__(self, lambda_d=0.05, lambda_l=0.01, lambda_lpips=0.05, device='cpu'):
         super().__init__()
 
-        self.lambda_o, self.lambda_d, self.lambda_l = lambda_o, lambda_d, lambda_l
+        self.lambda_d, self.lambda_l = lambda_d, lambda_l
 
         self.rgb_loss_fn = RGBLoss(lambda_lpips=lambda_lpips, device=device)
-        self.opacity_loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
+        # self.opacity_loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
         self.dymask_loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
         self.lifespan_reg_fn = compute_lifespan_loss
     
-    def forward(self, img, target, skymask, t_skymask, dymask, t_dymask, lifespan_params, step):
+    def forward(self, img, target, dymask, t_dymask, lifespan_params, step):
         rgb_loss = self.rgb_loss_fn(step, img, target)
         # opacity_loss = self.lambda_o * self.opacity_loss_fn(skymask, t_skymask)
         if t_dymask is not None:
@@ -153,18 +148,9 @@ class FeedForwardLoss(nn.Module):
         return {
             'total': total_loss,
             'rgb': rgb_loss,
-            # 'mask': opacity_loss,
             'dymask': dymask_loss,
             'lifespan': lifespan_loss
         }
-    
-
-def print_cuda_memory_stats():
-    # stats = torch.cuda.memory_stats()
-    # for key in ['active.all.allocated', 'active.all.current', 'active.all.peak']:
-    #     print(f"{key}: {stats[key]}")
-    return
-    print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
 
 # args includes: output_path, log_dir, save_image, save_ckpt, local_rank, max_epoch
@@ -175,23 +161,12 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
     # scene_idx = 1
     points, colors = None, None
     
-    for batch in tqdm(dataloader, disable=not args.is_main):
-
-        time0 = time.time()
-        if args.debug_output:
-            print("Before training iteration:") if args.is_main else None    
-            print_cuda_memory_stats() if args.is_main else None
-
+    for batch in tqdm(dataloader):
         # load data from dataloader
         images = batch['images'].to(device)
-        
-        if 'masks' in batch:
-            sky_mask = batch['masks'].to(device).permute(0, 1, 3, 4, 2)
-            bg_mask = (sky_mask == 0).any(dim=-1)
-        else:
-            bg_mask = torch.ones((images.shape[0], images.shape[1], images.shape[3], images.shape[4]),
-                                  dtype=torch.bool, device=device)
-            
+        # sky_mask = batch['masks'].to(device).permute(0, 1, 3, 4, 2)
+        # bg_mask = (sky_mask == 0).any(dim=-1)
+        bg_mask = torch.ones((images.shape[0], images.shape[1], images.shape[3], images.shape[4]), dtype=torch.bool, device=device)
         timestamps = batch['timestamps'][0].to(device)
 
         start_time = time.time()
@@ -202,24 +177,9 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
 
         optimizer.zero_grad()
 
-        time1 = time.time()
-        args.time_list['data'].append(time1 - time0)
-        if args.debug_output:
-            print("Batch data loaded:") if args.is_main else None    
-            print(f"Time cost: {time1 - time0:.4f} seconds") if args.is_main else None
-            print_cuda_memory_stats() if args.is_main else None
-
         with torch.cuda.amp.autocast(dtype=dtype):
             # Get the predictions from the model
             predictions = model(images)
-
-            time2 = time.time()
-            args.time_list['forward'].append(time2 - time1)
-            if args.debug_output:
-                print("Model forward pass done:") if args.is_main else None    
-                print(f"Time cost: {time2 - time1:.4f} seconds") if args.is_main else None
-                print_cuda_memory_stats() if args.is_main else None
-
             H, W = images.shape[-2:]
             extrinsics, intrinsics = pose_encoding_to_extri_intri(predictions['pose_enc'], (H, W))
             extrinsic = extrinsics[0]
@@ -265,12 +225,6 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
 
             chunked_renders, chunked_alphas = [], []
 
-            time3 = time.time()
-            if args.debug_output:
-                print("Before rasterization:") if args.is_main else None    
-                print(f"Time cost: {time3 - time2:.4f} seconds") if args.is_main else None
-                print_cuda_memory_stats() if args.is_main else None
-
             for idx in range(dy_map.shape[1]):
                 t0 = timestamps[idx]
                 static_opacity_ = alpha_t(gs_timestamps, t0, static_opacity, gamma0 = static_gs_conf)
@@ -306,26 +260,11 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
 
             training_time = time.time() - start_time
             training_time_list.append(training_time)
-
-            time4 = time.time()
-            args.time_list['render'].append(time4 - time3)
-            if args.debug_output:
-                print("After rasterization:") if args.is_main else None    
-                print(f"Time cost: {time4 - time3:.4f} seconds") if args.is_main else None
-                print_cuda_memory_stats() if args.is_main else None
             
             # ============================== Loss ==============================
 
-            t_skymask = bg_mask[0][..., None].type(torch.float32)
-            loss_dict = loss_fn(rendered_image, target_image, alphas, t_skymask, dy_map, dynamic_masks, gs_conf, step)
-            # loss_dict = loss_fn(rendered_image, target_image, dy_map, dynamic_masks, gs_conf, step)
-
-            time5 = time.time()
-            args.time_list['loss'].append(time5 - time4)
-            if args.debug_output:
-                print("Loss computed:") if args.is_main else None    
-                print(f"Time cost: {time5 - time4:.4f} seconds") if args.is_main else None
-                print_cuda_memory_stats() if args.is_main else None
+            # t_skymask = bg_mask[0][..., None].type(torch.float32)
+            loss_dict = loss_fn(rendered_image, target_image, dy_map, dynamic_masks, gs_conf, step)
 
         if step % args.save_image == 0:
             points = static_points.detach().cpu().numpy()  # (N, 3)
@@ -338,41 +277,37 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
         
         # 记录损失
         train_loss_list.append(loss_dict['total'].item())
-
-        time6 = time.time()
-        args.time_list['backward'].append(time6 - time5)
-        if args.debug_output:
-            print("Backward down:") if args.is_main else None    
-            print(f"Time cost: {time6 - time5:.4f} seconds") if args.is_main else None
-            print_cuda_memory_stats() if args.is_main else None
-
+        # scene_idx += 1
 
     # =============================== Record ===============================
-    if args.is_main:
+
+    wandb.log({
+        **{f"loss/{k}": v.item() for k, v in loss_dict.items()},
+        "train/lr": scheduler.get_last_lr()[0],
+        "time/iteration": training_time
+    }, step=step)
+
+    # if step % 1 == 0:
+    #     print(f"[{step}/{args.max_epoch}] Loss: {loss_dict['total'].item():.4f} | LR: {scheduler.get_last_lr()}")
+
+    if step % args.save_image == 0:
+        # points = static_points[:100000].detach().cpu().numpy()  # (N, 3)
+        # colors = (static_rgbs[:100000] * 255).detach().cpu().numpy()    # (N, 3)
         wandb.log({
-            **{f"loss/{k}": v.item() for k, v in loss_dict.items()},
-            "train/lr": scheduler.get_last_lr()[0],
-            "time/iteration": training_time
+            "3D_pointmaps": wandb.Object3D(
+                np.concatenate([points, colors], axis=1)
+            )
         }, step=step)
+        filename = os.path.join(args.log_dir, "pts3d", f"pts3d_{step}.ply")
+        save_ply_open3d(filename, points, colors)
 
-        # if step % 1 == 0:
-        #     print(f"[{step}/{args.max_epoch}] Loss: {loss_dict['total'].item():.4f} | LR: {scheduler.get_last_lr()}")
 
-        if step % args.save_image == 0:
-            # points = static_points[:100000].detach().cpu().numpy()  # (N, 3)
-            # colors = (static_rgbs[:100000] * 255).detach().cpu().numpy()    # (N, 3)
-            wandb.log({
-                "3D_pointmaps": wandb.Object3D(
-                    np.concatenate([points, colors], axis=1)
-                )
-            }, step=step)
-            filename = os.path.join(args.log_dir, "pts3d", f"pts3d_{step}.ply")
-            save_ply_open3d(filename, points, colors)
-        
-        if step > 0 and step % args.save_ckpt == 0:
-            ckpt_path = os.path.join(args.log_dir, "ckpts", f"model_{step}.pt")
-            torch.save(model.module.state_dict(), ckpt_path)
-            print(f"[Checkpoint] Saved model at step {step} to {ckpt_path}")
+    
+    # TODO: args.log_dir
+    if step > 0 and step % args.save_ckpt == 0:
+        ckpt_path = os.path.join(args.log_dir, "ckpts", f"model_{step}.pt")
+        torch.save(model.state_dict(), ckpt_path)
+        print(f"[Checkpoint] Saved model at step {step} to {ckpt_path}")
 
 
 # args includes: output_path, log_dir, save_image, save_ckpt, local_rank, max_epoch
@@ -383,106 +318,75 @@ def main():
     parser.add_argument('--image_dir', type=str, default="../../dataset/waymo_processed/validation", help='Path to the input images')
     parser.add_argument('--sequence_length', type=int, default=4, help='Number of input frames')
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
-    parser.add_argument('--log_dir', type=str, default="logs/debug", help='Path to the log directory')
+    parser.add_argument('--log_dir', type=str, default="logs/test", help='Path to the log directory')
     parser.add_argument('--save_image', type=int, default=5, help='Epoch intervals to save images')
     parser.add_argument('--save_ckpt', type=int, default=5, help='Epoch intervals to save checkpoints')
     parser.add_argument('--ckpt_path', type=str, default="logs/test/ckpts/model_final.pt", help='Path to the pre-trained checkpoint')
-    parser.add_argument('--local_rank', type=int, default=6, help='Local rank for distributed training')
+    parser.add_argument('--local_rank', type=int, default=4, help='Local rank for distributed training')
     parser.add_argument('--max_epoch', type=int, default=1, help='Maximum number of epochs')
     parser.add_argument('--start_epoch', type=int, default=0, help='Start number of epochs')
-    parser.add_argument('--debug_output', action='store_true', help='If to output time and GPU info')
-    parser.add_argument('--dataset', type=str, default='waymo', help='Type of dataset to use')
-    parser.add_argument('--random', type=int, default=42, help='Random seed')
     args = parser.parse_args()
 
     # ================ Initial ================
-    dist.init_process_group(backend='nccl')
-    args.local_rank = int(os.environ["LOCAL_RANK"])
+
+    wandb.init(
+        project="dggt-waymo-fintune",
+        name=f"{args.exp_name}",
+        config=vars(args)
+    )
+
     torch.cuda.set_device(args.local_rank)
     device = torch.device("cuda", args.local_rank)
-    torch.manual_seed(args.random)
-    torch.cuda.manual_seed_all(args.random)
     dtype = torch.float32
 
-    args.is_main = (args.local_rank == 0)
-
-    if not args.is_main:
-        import warnings
-        warnings.filterwarnings("ignore")
-
-    if args.is_main:
-        wandb.init(
-            project="dggt-waymo-fintune",
-            name=f"{args.exp_name}",
-            config=vars(args)
-        )
-
     # ================ Dataset ================
-    if args.dataset == 'waymo':
-        dataset = WaymoOpenDataset(
-            image_dir=args.image_dir,
-            # scene_names=[str(i).zfill(3) for i in range(0,2)],
-            scene_names=[str(i).zfill(3) for i in range(0,202)],
-            sequence_length=args.sequence_length,
-            mode=1,
-            views=1
-        )
-    elif args.dataset == 'davis':
-        dataset = DavisDataset(
-            data_path=args.image_dir,
-            seq_len=args.sequence_length,
-            partial=False
-        )
-    else:
-        if args.is_main:
-            print(f"Unknown dataset type: {args.dataset}")
-        wandb.finish()
-        return
-    
-    sampler = DistributedSampler(dataset, shuffle=True)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=4)
 
-    if args.is_main:
-        print("Dataset loaded successfully !")
-        os.makedirs(args.log_dir, exist_ok=True)
-        os.makedirs(os.path.join(args.log_dir, 'ckpts'), exist_ok=True)
-        os.makedirs(os.path.join(args.log_dir, 'pts3d'), exist_ok=True)
+    dataset = WaymoOpenDataset(
+        image_dir=args.image_dir,
+        # scene_names=[str(i).zfill(3) for i in range(0,2)],
+        scene_names=[str(i).zfill(3) for i in range(0,202)],
+        sequence_length=args.sequence_length,
+        mode=1,
+        views=1
+    )
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=4)
+
+    
+    print("Dataset loaded successfully !")
+    os.makedirs(args.log_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.log_dir, 'ckpts'), exist_ok=True)
+    os.makedirs(os.path.join(args.log_dir, 'pts3d'), exist_ok=True)
 
     # ================ Model ================
 
     model = VGGT().to(device)
+    checkpoint = torch.load(args.ckpt_path, map_location="cpu")
+    model.load_state_dict(checkpoint, strict=False)
+    '''
     if args.ckpt_path != "":
-        if args.is_main:
-            print(f"Resume training, loading model from {args.ckpt_path}...")
+        print(f"Resume training, loading model from {args.ckpt_path}...")
         checkpoint = torch.load(args.ckpt_path, map_location="cpu")
-        model.load_state_dict(checkpoint, strict=False)
+        model.load_state_dict(checkpoint, strict=True)
+    '''
 
     model.train()
-    if args.is_main:
-        print("VGGT model loaded successfully !")
+    print("VGGT model loaded successfully !")
+
+    loss_fn = FeedForwardLoss(lambda_d=0.05, lambda_l=0.01, lambda_lpips=0.05, device=device)
 
     for param in model.parameters():
         param.requires_grad = False
-    for head_name in ["point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head", "instance_head", "sky_model", "semantic_head"
+    for head_name in ["point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head","instance_head","sky_model", "semantic_head"
         for param in getattr(model, head_name).parameters():
             param.requires_grad = True
-
-    model = DDP(
-        model,
-        device_ids=[args.local_rank], 
-        static_graph=False,
-        find_unused_parameters=True
-    )
-
-    loss_fn = FeedForwardLoss(lambda_o=1, lambda_d=0.05, lambda_l=0.01, lambda_lpips=0.05, device=device)
 
     # ================ Optimizer & Scheduler ================
 
     optimizer = AdamW([
-        {'params': model.module.point_head.parameters(), 'lr': 1e-4},
-        {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
-        {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
-        {'params': model.module.instance_head.parameters(), 'lr': 4e-5}
+        {'params': model.point_head.parameters(), 'lr': 1e-4},
+        {'params': model.depth_head.parameters(), 'lr': 1e-4},
+        {'params': model.gs_head.parameters(), 'lr': 4e-5},
+        {'params': model.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)
 
     warmup_iterations = 1000
@@ -492,27 +396,14 @@ def main():
             1 + torch.cos(torch.tensor(torch.pi * step / args.max_epoch)))
     )
 
-    if args.is_main:
-        print("Begin the training...")
+    print("Begin the training...")
 
-    time_list = {}
-    time_list['data'], time_list['forward'], time_list['render'], time_list['loss'], time_list['backward'] = [], [], [], [], []
-    args.time_list = time_list
-
-    for step in tqdm(range(args.start_epoch, args.max_epoch), disable=not args.is_main):
+    for step in tqdm(range(args.start_epoch, args.max_epoch)):
         train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device, args)
 
-    if args.is_main:
-        ckpt_path = os.path.join(args.log_dir, "ckpts", f"model_final.pt")
-        torch.save(model.module.state_dict(), ckpt_path)
-        print(f"[Checkpoint] Saved final model to {ckpt_path}")
-
-        for key in time_list:
-            times = time_list[key]
-            avg_time = sum(times) / len(times) if len(times) > 0 else 0
-            print(f"Average time for {key}: {avg_time:.4f} seconds over {len(times)} iterations.")
-
-        wandb.finish()
+    ckpt_path = os.path.join(args.log_dir, "ckpts", f"model_final.pt")
+    torch.save(model.state_dict(), ckpt_path)
+    print(f"[Checkpoint] Saved final model to {ckpt_path}")
 
 
 if __name__ == "__main__":
