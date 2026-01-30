@@ -110,8 +110,9 @@ def main():
             # FIXME: Hacky work...
             scene_name = batch['name']
             images = batch['images'].to(device)
-            bg_mask = batch['masks'].to(device)[0]
-
+            bg_mask = torch.ones((images.shape[0], images.shape[1], images.shape[3], images.shape[4]), dtype=torch.bool, device=device)
+            # sky_mask = batch['masks'].to(device).permute(0, 1, 3, 4, 2)
+            # bg_mask = (sky_mask == 0).any(dim=-1)
             start_time = time.time()
 
             with torch.cuda.amp.autocast(dtype=dtype):
@@ -132,7 +133,7 @@ def main():
                     point_map = predictions["world_points"]
                 gs_map = predictions["gs_map"]
                 gs_conf = predictions["gs_conf"]
-                dy_map = predictions["dynamic_conf"].squeeze(-1) #B,H,W,1
+                dy_map = predictions["dynamic_conf"].squeeze(-1) # B,H,W,1
 
                 static_mask = (bg_mask & (dy_map < 0.5))
                 static_points = point_map[static_mask].reshape(-1, 3)

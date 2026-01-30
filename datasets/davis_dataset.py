@@ -29,6 +29,88 @@ class DavisDataset(Dataset):
                             "varanus-cage",
                             "walking"
                         ]
+            
+        self.image_path = os.path.join(data_path, 'JPEGImages', '480p')
+        self.dymask_path = os.path.join(data_path, 'Annotations', '480p')
+        self.skymask_path = os.path.join(data_path, 'sky_masks')
+
+        for item in os.listdir(self.image_path):
+            if not partial or item in test_list:
+                item_path = os.path.join(self.image_path, item)
+                if os.path.isdir(item_path):
+                    self.data_list.append(item)
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+
+        data_name = self.data_list[idx]
+
+        image_path_list = []
+        skymask_path_list = []
+        dymask_path_list = []
+
+        for file in os.listdir(os.path.join(self.image_path, data_name)):
+            filename = file.split('.')[0]
+            image_path_list.append(os.path.join(self.image_path, data_name, filename + '.jpg'))
+            skymask_path_list.append(os.path.join(self.skymask_path, data_name, filename + '.png'))
+            dymask_path_list.append(os.path.join(self.dymask_path, data_name, filename + '.png'))
+
+        idx = np.linspace(0, len(image_path_list) - 1, num=self.seq_len, dtype=int)
+        
+        image_seq = [image_path_list[i] for i in idx]
+        images = load_and_preprocess_images(image_seq)          # [T, C, H, W]
+
+        skymask_seq = [skymask_path_list[i] for i in idx]
+        skymasks = load_and_preprocess_images(skymask_seq)      # [S, C, H, W]
+
+        dymask_seq = [dymask_path_list[i] for i in idx]
+        dymasks = load_and_preprocess_images(dymask_seq)        # [S, C, H, W]
+
+        
+        sequence_length = images.shape[0]
+        indices = [i * self.interval for i in range(sequence_length)]
+        intervals = [self.interval for _ in range(sequence_length - 1)]
+        
+        timestamps = np.array(indices)
+        timestamps = timestamps / timestamps[-1] * (sequence_length / 4)
+
+        input_dict = {
+            "name": data_name,
+            "images": images,
+            "masks": skymasks,
+            "dynamic_mask": dymasks,
+            "timestamps": timestamps,
+            "intervals": intervals
+        }
+
+        return input_dict
+    
+
+class NaiveDavisDataset(Dataset):
+    def __init__(self, data_path, interval=1, seq_len=4, partial=False):
+
+        self.data_list = []
+        self.seq_len = seq_len
+        self.interval = interval
+
+        if partial:
+            test_list = [  
+                            "boxing-fisheye",
+                            "car-shadow",
+                            "car-roundabout",
+                            "car-turn",
+                            "cat-girl",
+                            "color-run",
+                            "cows",
+                            "drift-turn",
+                            "india",
+                            "lucia",
+                            "scooter-gray",
+                            "varanus-cage",
+                            "walking"
+                        ]
 
         for item in os.listdir(data_path):
             if not partial or item in test_list:
@@ -59,11 +141,11 @@ class DavisDataset(Dataset):
         bg_mask = torch.from_numpy(bg_mask)
 
         name = data_path.split('/')[-1]
-        
+
         sequence_length = images.shape[0]
         indices = [i * self.interval for i in range(sequence_length)]
         intervals = [self.interval for _ in range(sequence_length - 1)]
-        
+
         timestamps = np.array(indices)
         timestamps = timestamps / timestamps[-1] * (sequence_length / 4)
 
@@ -84,6 +166,7 @@ class DavisDataset(Dataset):
         }
 
         return input_dict
+
     
 '''
 def extract_frames_from_video(video_path, max_frames=100):
