@@ -164,3 +164,11 @@ python davis_batch.py \
   --sequence_length 4 \
   --ckpt_path checkpoints/vggt_model.pt \
   --output_path result/davis_result/mask0_davis
+
+
+python davis_batch.py \
+  --image_dir davis \
+  --sequence_length 4 \
+  --ckpt_path checkpoints/vggt_model.pt \
+  --output_path result/davis_result/naive_vggt \
+  --compare

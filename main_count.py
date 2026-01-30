@@ -392,6 +392,7 @@ def main():
     parser.add_argument('--start_epoch', type=int, default=0, help='Start number of epochs')
     parser.add_argument('--debug_output', action='store_true', help='If to output time and GPU info')
     parser.add_argument('--dataset', type=str, default='waymo', help='Type of dataset to use')
+    parser.add_argument('--random', type=int, default=42, help='Random seed')
     args = parser.parse_args()
 
     # ================ Initial ================
@@ -399,6 +400,8 @@ def main():
     args.local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(args.local_rank)
     device = torch.device("cuda", args.local_rank)
+    torch.manual_seed(args.random)
+    torch.cuda.manual_seed_all(args.random)
     dtype = torch.float32
 
     args.is_main = (args.local_rank == 0)
@@ -460,7 +463,7 @@ def main():
 
     for param in model.parameters():
         param.requires_grad = False
-    for head_name in ["camera_head", "point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head","instance_head","sky_model", "semantic_head"
+    for head_name in ["point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head", "instance_head", "sky_model", "semantic_head"
         for param in getattr(model, head_name).parameters():
             param.requires_grad = True
 
@@ -476,6 +479,8 @@ def main():
     # ================ Optimizer & Scheduler ================
 
     optimizer = AdamW([
+        {'params': model.module.point_head.parameters(), 'lr': 1e-4},
+        {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
         {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
         {'params': model.module.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)

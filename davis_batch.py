@@ -12,7 +12,7 @@ from dggt.utils.gs import get_split_gs
 from dggt.utils.pose_enc import pose_encoding_to_extri_intri
 from dggt.utils.geometry import unproject_depth_map_to_point_map
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
-from datasets.davis_dataset import DavisDataset
+from datasets.davis_dataset import DavisDataset, NaiveDavisDataset
 
 def alpha_t(t, t0, alpha, gamma0 = 1, gamma1 = 0.1):
     sigma = torch.log(torch.tensor(gamma1)).to(gamma0.device) / ((gamma0)**2 + 1e-6)
@@ -79,6 +79,76 @@ def save_ply_open3d(filename, pts3d, view):
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
 
 
+def compare_model_weights(a, b, rtol=1e-5, atol=1e-8, verbose=True):
+    """
+    比较两个 model 的权重（假设结构相同）。
+    返回 dict 包含总参数数、不同参数数、差异层列表及每层统计。
+    rtol/atol 用于 isclose 判定。
+    save_csv: 若给出路径，会把 per-layer 统计写入 csv。
+    """
+
+    sd_a = a.state_dict()
+    sd_b = b.state_dict()
+
+    keys_a = set(sd_a.keys())
+    keys_b = set(sd_b.keys())
+    if keys_a != keys_b:
+        missing_in_b = keys_a - keys_b
+        missing_in_a = keys_b - keys_a
+        raise ValueError(f"state_dict keys mismatch. missing_in_b={missing_in_b}, missing_in_a={missing_in_a}")
+
+    total_params = 0
+    diff_params = 0
+    layer_stats = []
+
+    for k in sd_a.keys():
+        ta = sd_a[k]
+        tb = sd_b[k]
+        if ta.shape != tb.shape:
+            raise ValueError(f"shape mismatch for {k}: {ta.shape} vs {tb.shape}")
+
+        # ensure on CPU for comparison to avoid CUDA sync overhead
+        xa = ta.detach().cpu()
+        xb = tb.detach().cpu()
+        diff = (xa - xb).abs()
+        numel = xa.numel()
+        total_params += numel
+
+        # mask of elements considered "different" by tolerances
+        tol = atol + rtol * xb.abs()
+        mask = diff > tol
+        n_diff = int(mask.sum().item())
+        diff_params += n_diff
+
+        stat = {
+            "name": k,
+            "shape": tuple(xa.shape),
+            "numel": numel,
+            "n_differ": n_diff,
+            "pct_differ": n_diff / numel * 100.0,
+            "max_abs_diff": float(diff.max().item()) if numel>0 else 0.0,
+            "mean_abs_diff": float(diff.mean().item()) if numel>0 else 0.0,
+            "norm_diff": float(torch.norm(xa - xb).item())
+        }
+        layer_stats.append(stat)
+        # if verbose and (n_diff > 0):
+        #     print(f"[DIFF] {k}: {n_diff}/{numel} ({stat['pct_differ']:.4f}%) max={stat['max_abs_diff']:.4e} mean={stat['mean_abs_diff']:.4e}")
+
+    summary = {
+        "total_params": total_params,
+        "diff_params": diff_params,
+        "pct_params_diff": diff_params / total_params * 100.0 if total_params>0 else 0.0,
+        "layer_stats": layer_stats
+    }
+
+    if verbose:
+        print("==== SUMMARY ====")
+        print(f"total params: {summary['total_params']}")
+        print(f"diff params: {summary['diff_params']} ({summary['pct_params_diff']:.6f}%)")
+
+    return summary
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--image_dir', type=str, required=True, help='Path to the input images')
@@ -87,6 +157,7 @@ def main():
     parser.add_argument('--start_idx', type=int, default=0, help='Starting frame index')
     parser.add_argument('--ckpt_path', type=str, required=True, help='Path to the model weights')
     parser.add_argument('--output_path', type=str, required=True, help='Output directory for results')
+    parser.add_argument('--compare', action='store_true', help='Whether to compare model weights')
     args = parser.parse_args()
     os.makedirs(args.output_path, exist_ok=True)
     device = "cuda:1" if torch.cuda.is_available() else "cpu"
@@ -94,14 +165,25 @@ def main():
 
     # scene_names_str = ' '.join(args.scene_names)
     # scene_names = parse_scene_names(scene_names_str)
-    dataset = DavisDataset(args.image_dir, partial=True)
+    dataset = NaiveDavisDataset(args.image_dir, partial=True)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+
+    torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
 
     model = VGGT().to(device)
     checkpoint = torch.load(args.ckpt_path, map_location="cpu")
     model.load_state_dict(checkpoint, strict=False)
     model.eval()
     inference_time_list = []
+
+    if args.compare:
+        compare_model = VGGT().to(device)
+        checkpoint = torch.load("checkpoints/vggt_model.pt", map_location="cpu")
+        compare_model.load_state_dict(checkpoint, strict=False)
+        compare_model.eval()
+        compare_model_weights(model.point_head, compare_model.point_head)
+        return
 
     with torch.no_grad():
         for batch in tqdm(dataloader):

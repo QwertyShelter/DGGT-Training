@@ -376,15 +376,17 @@ def main():
 
     for param in model.parameters():
         param.requires_grad = False
-    for head_name in ["camera_head", "point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head","instance_head","sky_model", "semantic_head"
+    for head_name in ["point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head","instance_head","sky_model", "semantic_head"
         for param in getattr(model, head_name).parameters():
             param.requires_grad = True
 
     # ================ Optimizer & Scheduler ================
 
     optimizer = AdamW([
-        {'params': model.gs_head.parameters(), 'lr': 4e-5},
-        {'params': model.instance_head.parameters(), 'lr': 4e-5}
+        {'params': model.module.point_head.parameters(), 'lr': 1e-4},
+        {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
+        {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
+        {'params': model.module.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)
 
     warmup_iterations = 1000
