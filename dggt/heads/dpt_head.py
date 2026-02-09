@@ -352,7 +352,7 @@ class GaussianHead(nn.Module):
         self.down_ratio = down_ratio
         self.intermediate_layer_idx = intermediate_layer_idx
         self.sh_degree = sh_degree
-        self.norm = nn.LayerNorm(dim_in)
+        self.norm = nn.LayerNorm(dim_in, eps=1e-4)      # , elementwise_affine=False)              # FIXME: Try to fix NaN problem
 
         # Projection layers for each output channel from tokens.
         self.projects = nn.ModuleList(
@@ -452,6 +452,12 @@ class GaussianHead(nn.Module):
         for frames_start_idx in range(0, S, frames_chunk_size):
             frames_end_idx = min(frames_start_idx + frames_chunk_size, S)
 
+            for token in aggregated_tokens_list:
+                if torch.isnan(token).any():
+                    print(f"[NaN] loss at 'token' in GaussianHead line 453")
+                if torch.isinf(token).any():
+                    print(f"[INF] loss at 'token' in GaussianHead line 453")
+
             # Process batch of frames
             if self.feature_only:
                 chunk_output = self._forward_impl(
@@ -513,7 +519,30 @@ class GaussianHead(nn.Module):
 
             x = x.view(B * S, -1, x.shape[-1])
 
-            x = self.norm(x)
+            if torch.isnan(x).any():
+                print(f"[NaN] loss at 'x' in GaussianHead line 514")
+            if torch.isinf(x).any():
+                print(f"[INF] loss at 'x' in GaussianHead line 514")
+            
+            origin_x = x.clone()
+            with torch.cuda.amp.autocast(enabled=False):
+                x = self.norm(x)
+
+            if torch.isnan(x).any():
+                print(f"[NaN] loss at 'norm(x)' in GaussianHead line 521")
+                print(origin_x)
+                if not os.path.exists("tensor.pt"):
+                    torch.save(origin_x, "tensor.pt")
+                mean = origin_x.mean(dim=-1, keepdim=True)
+                var = ((origin_x - mean) ** 2).mean(dim=-1, keepdim=True)
+
+                print("var min:", var.min().item())
+                print("var max:", var.max().item())
+
+                print("LN weight finite:", torch.isfinite(self.norm.weight).all())
+                print("LN bias finite:", torch.isfinite(self.norm.bias).all())
+
+
 
             x = x.permute(0, 2, 1).reshape((x.shape[0], x.shape[-1], patch_h, patch_w))
 
@@ -525,15 +554,26 @@ class GaussianHead(nn.Module):
             out.append(x)
             dpt_idx += 1
 
+        for feat in out:
+            if torch.isnan(feat).any():
+                print(f"[NaN] loss at 'conf' in GaussianHead line 525")
+
         # Fuse features from multiple layers.
         out = self.scratch_forward(out)
         # Interpolate fused output to match target image resolution.
+
+        if torch.isnan(out).any():
+            print(f"[NaN] loss at 'out' in GaussianHead line 532")
+
         out = custom_interpolate(
             out,
             (int(patch_h * self.patch_size / self.down_ratio), int(patch_w * self.patch_size / self.down_ratio)),
             mode="bilinear",
             align_corners=True,
         )
+
+        if torch.isnan(out).any():
+            print(f"[NaN] loss at 'out' in GaussianHead line 538")
 
         if self.pos_embed:
             out = self._apply_pos_embed(out, W, H)
@@ -543,6 +583,9 @@ class GaussianHead(nn.Module):
 
         out = self.scratch.output_conv2(out)
         preds, conf = gs_activate_head(out,  sh_degree = self.sh_degree)
+
+        if torch.isnan(out).any():
+            print(f"[NaN] loss at 'out' in GaussianHead line 554")
 
         preds = preds.view(B, S, *preds.shape[1:])
         conf = conf.view(B, S, *conf.shape[1:])

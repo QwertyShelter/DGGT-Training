@@ -164,7 +164,7 @@ def gs_activate_head(out, sh_degree=None, tau = 0.5):
         color = torch.sigmoid(color)
     opacity = torch.sigmoid(opacity) 
     scale =  0.1 * F.softplus(scale)
-    rotation = F.normalize(rotation, dim=-1)
+    rotation = F.normalize(rotation, dim=-1, eps=1e-6)              # FIXME: Try to fix conf NaN
 
     pts3d = torch.concat([color,opacity,scale,rotation],dim=-1)
 
@@ -180,7 +180,7 @@ def gs_activate_head(out, sh_degree=None, tau = 0.5):
     # conf_out = torch.sigmoid(conf) #conf * 0.01
     # conf_out = torch.where(conf_out > tau, conf_out, conf_out * 1e-3)
 
-    conf_out = torch.relu(conf) 
+    conf_out = torch.relu(conf)                                     # TODO: Try to fix conf NaN
     conf_out = 1/(conf_out + 1e-6)
 
     return pts3d, conf_out

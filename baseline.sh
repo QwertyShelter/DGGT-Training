@@ -150,11 +150,11 @@ python datasets/tools/extract_davis_masks.py \
     --checkpoint=checkpoints/segformer.b5.1024x1024.city.160k.pth
 
 
-CUDA_VISIBLE_DEVICES=1,4 torchrun --nproc_per_node=2 --master_port=12345 main_count.py \
-  --exp_name davis_mask_test \
+CUDA_VISIBLE_DEVICES=1,4 torchrun --nproc_per_node=2 --master_port=12345 main.py \
+  --exp_name davis_mask_train \
   --image_dir /data/wangpeifeng/dataset/DAVIS/ --batch_size 1 \
-  --start_epoch 100 --max_epoch 1000 \
-  --save_image 20 --save_ckpt 50 --log_dir "logs/davis_mask" \
+  --start_epoch 0 --max_epoch 60 \
+  --save_image 20 --save_ckpt 20 --log_dir "logs/davis_mask" \
   --ckpt_path checkpoints/vggt_model.pt \
   --dataset davis
 
@@ -169,6 +169,22 @@ python davis_batch.py \
 python davis_batch.py \
   --image_dir davis \
   --sequence_length 4 \
-  --ckpt_path checkpoints/vggt_model.pt \
-  --output_path result/davis_result/naive_vggt \
-  --compare
+  --ckpt_path logs/davis_mask/ckpts/model_20.pt \
+  --output_path result/davis_result/naive_vggt
+
+
+CUDA_VISIBLE_DEVICES=3,4 torchrun --nproc_per_node=2 --master_port=12345 main.py \
+  --exp_name davis_mask_debug \
+  --image_dir /data/wangpeifeng/dataset/DAVIS/ --batch_size 1 \
+  --start_epoch 20 --max_epoch 80 \
+  --save_image 100 --save_ckpt 20 --log_dir "logs/davis_mask" \
+  --ckpt_path logs/davis_mask/ckpts/model_20.pt \
+  --dataset davis
+
+CUDA_VISIBLE_DEVICES=3 torchrun --nproc_per_node=1 --master_port=12345 main.py \
+  --exp_name davis_mask_debug \
+  --image_dir /data/wangpeifeng/dataset/DAVIS/ --batch_size 1 \
+  --start_epoch 20 --max_epoch 80 \
+  --save_image 100 --save_ckpt 20 --log_dir "logs/davis_mask" \
+  --ckpt_path logs/davis_mask/ckpts/model_20.pt \
+  --dataset davis

@@ -1,7 +1,7 @@
 import os
 
-os.environ["http_proxy"] = "http://127.0.0.1:7890"
-os.environ["https_proxy"] = "http://127.0.0.1:7890"
+# os.environ["http_proxy"] = "http://127.0.0.1:7890"
+# os.environ["https_proxy"] = "http://127.0.0.1:7890"
 
 import time
 import torch
@@ -124,8 +124,9 @@ class RGBLoss(nn.Module):
         return mse_loss + self.lambda_lpips * lpips_loss
     
 
+# TODO: Try to fix NaN problem
 def compute_lifespan_loss(gamma):
-    return torch.mean(torch.abs(1 / (gamma + 1e-6)))
+    return torch.mean(1 / (torch.abs(gamma) + 1e-6))
 
 
 class FeedForwardLoss(nn.Module):
@@ -227,10 +228,11 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
             extrinsic = torch.cat([extrinsic, bottom], dim=1)
             intrinsic = intrinsics[0]
 
-            use_depth = True
+            # TODO: No depth ! ! !
+            use_depth = False
             if use_depth:
                 depth_map = predictions["depth"][0]
-                point_map = unproject_depth_map_to_point_map(depth_map.detach(), extrinsics[0].detach(), intrinsics[0].detach())[None,...]
+                point_map = unproject_depth_map_to_point_map(depth_map, extrinsics[0], intrinsics[0])[None,...]
                 point_map = torch.from_numpy(point_map).to(device).float()
             else:
                 point_map = predictions["world_points"]
@@ -287,8 +289,8 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
                 renders_chunk, alphas_chunk, _ = rasterization(
                     means=world_points,
                     quats=rotation,
-                    scales=scales,
-                    opacities=opacity,
+                    scales=scales.clamp(1e-4, 0.1),             # FIXME: avoid NaN
+                    opacities=opacity.clamp(0, 1),              # FIXME: avoid NaN
                     colors=rgbs,
                     viewmats=extrinsic[idx][None],
                     Ks=intrinsic[idx][None],
@@ -316,6 +318,14 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
             
             # ============================== Loss ==============================
 
+            if args.is_main and torch.isnan(dy_map).any():
+                print(f"[NaN] loss at step {step} for 'dy_map'")
+                continue
+
+            if args.is_main and torch.isnan(gs_conf).any():
+                print(f"[NaN] loss at step {step} for 'gs_conf'")
+                continue
+
             t_skymask = bg_mask[0][..., None].type(torch.float32)
             loss_dict = loss_fn(rendered_image, target_image, alphas, t_skymask, dy_map, dynamic_masks, gs_conf, step)
             # loss_dict = loss_fn(rendered_image, target_image, dy_map, dynamic_masks, gs_conf, step)
@@ -337,6 +347,9 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
         scheduler.step()
         
         # 记录损失
+        if args.is_main and not torch.isfinite(loss_dict['total']):
+            print(f"[NaN] loss at step {step}")
+            continue
         train_loss_list.append(loss_dict['total'].item())
 
         time6 = time.time()
@@ -380,18 +393,18 @@ def train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device,
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', type=str, default="debug", help='Experiment name')
-    parser.add_argument('--image_dir', type=str, default="../../dataset/waymo_processed/validation", help='Path to the input images')
+    parser.add_argument('--image_dir', type=str, default="/data/wangpeifeng/dataset/DAVIS/", help='Path to the input images')
     parser.add_argument('--sequence_length', type=int, default=4, help='Number of input frames')
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
     parser.add_argument('--log_dir', type=str, default="logs/debug", help='Path to the log directory')
     parser.add_argument('--save_image', type=int, default=5, help='Epoch intervals to save images')
     parser.add_argument('--save_ckpt', type=int, default=5, help='Epoch intervals to save checkpoints')
-    parser.add_argument('--ckpt_path', type=str, default="logs/test/ckpts/model_final.pt", help='Path to the pre-trained checkpoint')
-    parser.add_argument('--local_rank', type=int, default=6, help='Local rank for distributed training')
+    parser.add_argument('--ckpt_path', type=str, default="checkpoints/vggt_model.pt", help='Path to the pre-trained checkpoint')
+    parser.add_argument('--local_rank', type=int, default=1, help='Local rank for distributed training')
     parser.add_argument('--max_epoch', type=int, default=1, help='Maximum number of epochs')
     parser.add_argument('--start_epoch', type=int, default=0, help='Start number of epochs')
     parser.add_argument('--debug_output', action='store_true', help='If to output time and GPU info')
-    parser.add_argument('--dataset', type=str, default='waymo', help='Type of dataset to use')
+    parser.add_argument('--dataset', type=str, default='davis', help='Type of dataset to use')
     parser.add_argument('--random', type=int, default=42, help='Random seed')
     args = parser.parse_args()
 
@@ -463,7 +476,7 @@ def main():
 
     for param in model.parameters():
         param.requires_grad = False
-    for head_name in ["point_head", "depth_head", "gs_head", "instance_head"]: #, "gs_head", "instance_head", "sky_model", "semantic_head"
+    for head_name in ["point_head", "gs_head", "instance_head"]: #, "gs_head", "instance_head", "sky_model", "semantic_head"
         for param in getattr(model, head_name).parameters():
             param.requires_grad = True
 
@@ -480,7 +493,7 @@ def main():
 
     optimizer = AdamW([
         {'params': model.module.point_head.parameters(), 'lr': 1e-4},
-        {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
+        # {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
         {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
         {'params': model.module.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)
@@ -498,6 +511,8 @@ def main():
     time_list = {}
     time_list['data'], time_list['forward'], time_list['render'], time_list['loss'], time_list['backward'] = [], [], [], [], []
     args.time_list = time_list
+
+    torch.autograd.set_detect_anomaly(True)
 
     for step in tqdm(range(args.start_epoch, args.max_epoch), disable=not args.is_main):
         train(model, dataloader, optimizer, scheduler, loss_fn, step, dtype, device, args)
