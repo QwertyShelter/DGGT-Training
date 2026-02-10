@@ -181,7 +181,7 @@ CUDA_VISIBLE_DEVICES=3,4 torchrun --nproc_per_node=2 --master_port=12345 main.py
   --ckpt_path logs/davis_mask/ckpts/model_20.pt \
   --dataset davis
 
-CUDA_VISIBLE_DEVICES=3 torchrun --nproc_per_node=1 --master_port=12345 main.py \
+CUDA_VISIBLE_DEVICES=4,5 torchrun --nproc_per_node=2 --master_port=12345 main.py \
   --exp_name davis_mask_debug \
   --image_dir /data/wangpeifeng/dataset/DAVIS/ --batch_size 1 \
   --start_epoch 20 --max_epoch 80 \

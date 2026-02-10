@@ -492,9 +492,9 @@ def main():
     # ================ Optimizer & Scheduler ================
 
     optimizer = AdamW([
-        {'params': model.module.point_head.parameters(), 'lr': 1e-4},
+        {'params': model.module.point_head.parameters(), 'lr': 1e-5},
         # {'params': model.module.depth_head.parameters(), 'lr': 1e-4},
-        {'params': model.module.gs_head.parameters(), 'lr': 4e-5},
+        {'params': model.module.gs_head.parameters(), 'lr': 1e-4},
         {'params': model.module.instance_head.parameters(), 'lr': 4e-5}
     ], weight_decay=1e-4)
 

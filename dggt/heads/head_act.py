@@ -128,7 +128,12 @@ def inverse_log_transform(y):
     Returns:
         Transformed tensor
     """
-    return torch.sign(y) * (torch.expm1(torch.abs(y)))
+    # FIXME: Try to fix NaN problem
+    if torch.abs(y).max() > 20:
+        print("[WARN] inverse_log_transform y too large:", torch.abs(y).max().item())
+    abs_y = torch.abs(y)
+    abs_y = torch.clamp(abs_y, max=10.0)
+    return torch.sign(y) * (torch.expm1(abs_y))
 
 
 
@@ -180,7 +185,7 @@ def gs_activate_head(out, sh_degree=None, tau = 0.5):
     # conf_out = torch.sigmoid(conf) #conf * 0.01
     # conf_out = torch.where(conf_out > tau, conf_out, conf_out * 1e-3)
 
-    conf_out = torch.relu(conf)                                     # TODO: Try to fix conf NaN
+    conf_out = torch.relu(conf)                                     # FIXME: Try to fix conf NaN
     conf_out = 1/(conf_out + 1e-6)
 
     return pts3d, conf_out
