@@ -180,11 +180,26 @@ CUDA_VISIBLE_DEVICES=3,4 torchrun --nproc_per_node=2 --master_port=12345 main.py
   --save_image 100 --save_ckpt 20 --log_dir "logs/davis_mask" \
   --ckpt_path logs/davis_mask/ckpts/model_20.pt \
   --dataset davis
+  
 
-CUDA_VISIBLE_DEVICES=4,5 torchrun --nproc_per_node=2 --master_port=12345 main.py \
-  --exp_name davis_mask_debug \
-  --image_dir /data/wangpeifeng/dataset/DAVIS/ --batch_size 1 \
-  --start_epoch 20 --max_epoch 80 \
-  --save_image 100 --save_ckpt 20 --log_dir "logs/davis_mask" \
-  --ckpt_path logs/davis_mask/ckpts/model_20.pt \
-  --dataset davis
+python davis_batch.py \
+  --image_dir davis \
+  --sequence_length 4 \
+  --ckpt_path logs/davis_mask/ckpts/model_final.pt \
+  --output_path result/davis_result/naive_dggt_60
+
+
+CUDA_VISIBLE_DEVICES=0,3,5 torchrun --nproc_per_node=3 --master_port=12345 main.py   --exp_name davis_mask_debug   --image_dir /data/wangpeifeng/dataset/DAVIS/ --batch_size 1  --start_epoch 200 --max_epoch 400  --save_image 100 --save_ckpt 50 --log_dir "logs/davis_mask"   --ckpt_path logs/davis_mask/ckpts/model_final.pt   --dataset davis
+
+
+python datasets/preprocess_waymo.py \
+    --data_root ../../dataset/waymo-scene-flow/ \
+    --target_dir ../../dataset/waymo_processed/ \
+    --dataset waymo \
+    --split train \
+    --scene_list_file data/waymo_train_list.txt \
+    --start_idx 0 \
+    --num_scenes 798 \
+    --num_workers 8 \
+    --process_keys images lidar calib pose dynamic_masks ground \
+    --json_folder_to_save ../../dataset/annotations/waymo
